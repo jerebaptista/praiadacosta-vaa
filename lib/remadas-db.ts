@@ -150,11 +150,13 @@ export function extrairVagasDeRow(row: Record<string, unknown>): number {
  */
 export function mapearLinhaRemadaAdmin(
   row: Record<string, unknown>,
-  agora: Date
+  agora: Date,
+  preenchidas = 0
 ): {
   id: string;
   data_hora: string;
   vagas: number;
+  preenchidas: number;
   status: RemadaStatus;
   passou: boolean;
 } | null {
@@ -165,6 +167,7 @@ export function mapearLinhaRemadaAdmin(
     id: String(row.id),
     data_hora,
     vagas: extrairVagasDeRow(row),
+    preenchidas: Math.max(0, Math.trunc(preenchidas)),
     status: normalizarStatusRemada(row.status),
     passou: new Date(data_hora).getTime() <= agora.getTime(),
   };

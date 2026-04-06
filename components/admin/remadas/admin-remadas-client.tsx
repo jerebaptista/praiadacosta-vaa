@@ -10,8 +10,7 @@ import {
   startOfMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Plus, Table2, Trash2 } from "lucide-react";
-import { apagarTodasRemadas } from "@/app/actions/remadas";
+import { CalendarDays, Plus, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,23 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CriarRemadaDialog } from "@/components/admin/remadas/criar-remada-dialog";
 import { RemadasCalendarioView } from "@/components/admin/remadas/remadas-calendario-view";
 import { RemadasTabela } from "@/components/admin/remadas/remadas-tabela";
-import type { RemadaLinha } from "@/lib/remadas-geracao";
+import type { RemadaLinha, RemadaStatus } from "@/lib/remadas-geracao";
 
 const MESES = Array.from({ length: 12 }, (_, i) => i);
+
+type FiltroStatus = "todos" | RemadaStatus;
 
 type Props = {
   initialRemadas: RemadaLinha[];
@@ -45,28 +36,17 @@ type Props = {
 export function AdminRemadasClient({ initialRemadas }: Props) {
   const [remadas, setRemadas] = useState<RemadaLinha[]>(initialRemadas);
   const [mes, setMes] = useState(() => startOfMonth(new Date()));
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todos");
 
   useEffect(() => {
     setRemadas(initialRemadas);
   }, [initialRemadas]);
+
   const [dialogAberto, setDialogAberto] = useState(false);
   const [aba, setAba] = useState<"tabela" | "calendario">("tabela");
-  const [apagandoTodas, setApagandoTodas] = useState(false);
-  const [erroApagar, setErroApagar] = useState<string | null>(null);
-  const [dialogApagarAberto, setDialogApagarAberto] = useState(false);
-
-  const filtradas = useMemo(() => {
-    const y = getYear(mes);
-    const m = getMonth(mes);
-    return remadas.filter((r) => {
-      const d = new Date(r.data_hora);
-      return d.getFullYear() === y && d.getMonth() === m;
-    });
-  }, [remadas, mes]);
 
   const anoAtual = getYear(new Date());
 
-  /** Anos com pelo menos uma remada; se não houver dados, só o ano corrente. */
   const anosNoFiltro = useMemo(() => {
     const s = new Set<number>();
     for (const r of remadas) {
@@ -84,17 +64,21 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
     }
   }, [anosNoFiltro, mes, anoAtual]);
 
+  const filtradas = useMemo(() => {
+    const y = getYear(mes);
+    const m = getMonth(mes);
+    return remadas.filter((r) => {
+      const d = new Date(r.data_hora);
+      if (d.getFullYear() !== y || d.getMonth() !== m) return false;
+      if (filtroStatus !== "todos" && r.status !== filtroStatus) return false;
+      return true;
+    });
+  }, [remadas, mes, filtroStatus]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Remadas do estúdio
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cadastre, visualize por mês e organize as remadas (estilo agenda).
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Remadas</h1>
         <Button
           type="button"
           className="shrink-0 gap-2"
@@ -175,72 +159,20 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
               </SelectContent>
             </Select>
 
-            <AlertDialog
-              open={dialogApagarAberto}
-              onOpenChange={(open) => {
-                setDialogApagarAberto(open);
-                if (!open) setErroApagar(null);
-              }}
+            <Select
+              value={filtroStatus}
+              onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
             >
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                disabled={remadas.length === 0 || apagandoTodas}
-                onClick={() => setDialogApagarAberto(true)}
-              >
-                <Trash2 className="size-3.5" />
-                Apagar todas
-              </Button>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Apagar todas as remadas?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta ação remove todas as sessões da tabela de remadas. Não
-                    pode ser desfeita. Se existirem agendamentos ligados a uma
-                    remada, a operação pode falhar por restrições da base de
-                    dados.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                {erroApagar ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {erroApagar}
-                  </p>
-                ) : null}
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={apagandoTodas}>
-                    Cancelar
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    disabled={apagandoTodas}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setErroApagar(null);
-                      setApagandoTodas(true);
-                      void (async () => {
-                        try {
-                          await apagarTodasRemadas();
-                          setRemadas([]);
-                          setDialogApagarAberto(false);
-                        } catch (err) {
-                          setErroApagar(
-                            err instanceof Error
-                              ? err.message
-                              : "Não foi possível apagar."
-                          );
-                        } finally {
-                          setApagandoTodas(false);
-                        }
-                      })();
-                    }}
-                  >
-                    {apagandoTodas ? "A apagar…" : "Apagar todas"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              <SelectTrigger className="h-8 w-[7.5rem] shrink-0">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas</SelectItem>
+                <SelectItem value="agendada">Agendada</SelectItem>
+                <SelectItem value="concluida">Concluída</SelectItem>
+                <SelectItem value="cancelada">Cancelada</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

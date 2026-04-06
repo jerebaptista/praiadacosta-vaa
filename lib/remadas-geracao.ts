@@ -18,6 +18,8 @@ export type RemadaLinha = {
   id: string;
   data_hora: string;
   vagas: number;
+  /** Número de agendamentos confirmados para esta remada. */
+  preenchidas: number;
   status: RemadaStatus;
   /** Calculado no servidor: `data_hora <= now()` na hora em que a listagem foi gerada. */
   passou: boolean;
@@ -125,6 +127,7 @@ export function gerarLinhasRemada(input: GerarRemadasInput): RemadaLinha[] {
         id: crypto.randomUUID(),
         data_hora: base.toISOString(),
         vagas: input.vagas,
+        preenchidas: 0,
         status: "agendada" as const,
         passou: base.getTime() <= Date.now(),
       },
@@ -166,6 +169,7 @@ export function gerarLinhasRemada(input: GerarRemadasInput): RemadaLinha[] {
       id: crypto.randomUUID(),
       data_hora: dt.toISOString(),
       vagas: input.vagas,
+      preenchidas: 0,
       status: "agendada" as const,
       passou: dt.getTime() <= Date.now(),
     });

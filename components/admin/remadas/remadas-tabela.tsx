@@ -57,7 +57,6 @@ const ORDEM_STATUS: Record<RemadaStatus, number> = {
   cancelada: 2,
 };
 
-
 function formatData(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -158,17 +157,11 @@ function CelulaAcoes({
   const { status, passou } = remada;
   const bloqueado = pendente !== null;
 
-  // Agendada: Concluir, Cancelar
-  // Concluída: Agendar (só se !passou), Cancelar
-  // Cancelada: Agendar (só se !passou), Concluir
   const mostrarConcluir = status === "agendada" || status === "cancelada";
   const mostrarAgendar = !passou && (status === "concluida" || status === "cancelada");
   const mostrarCancelar = status === "agendada" || status === "concluida";
 
-  async function run(
-    chave: string,
-    fn: () => Promise<void>
-  ): Promise<void> {
+  async function run(chave: string, fn: () => Promise<void>): Promise<void> {
     setPendente(chave);
     try {
       await fn();
@@ -190,7 +183,7 @@ function CelulaAcoes({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-8 shrink-0"
+            className="size-8 shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 data-[state=open]:opacity-100"
             aria-label="Ações da remada"
             disabled={bloqueado}
           >
@@ -212,9 +205,7 @@ function CelulaAcoes({
             <DropdownMenuItem
               disabled={bloqueado}
               onSelect={() => {
-                void run("concluir", () =>
-                  marcarRemadaConcluida(remada.id)
-                );
+                void run("concluir", () => marcarRemadaConcluida(remada.id));
               }}
             >
               <Check className="size-4" />
@@ -226,9 +217,7 @@ function CelulaAcoes({
             <DropdownMenuItem
               disabled={bloqueado}
               onSelect={() => {
-                void run("agendar", () =>
-                  marcarRemadaAgendada(remada.id)
-                );
+                void run("agendar", () => marcarRemadaAgendada(remada.id));
               }}
             >
               <CalendarPlus className="size-4" />
@@ -279,6 +268,7 @@ export function RemadasTabela({ dados }: Props) {
 
   const colunas = useMemo<ColumnDef<RemadaLinha>[]>(
     () => [
+      // 1 — Data
       {
         id: "data_hora",
         accessorKey: "data_hora",
@@ -286,17 +276,19 @@ export function RemadasTabela({ dados }: Props) {
           <CabecalhoOrdenavel
             title="Data"
             sorted={column.getIsSorted()}
-            onSort={() =>
-              column.toggleSorting(column.getIsSorted() === "asc")
-            }
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
           />
         ),
         cell: ({ row }) => {
-          const riscado = row.original.status === "cancelada";
+          const { status } = row.original;
           return (
             <span
               className={
-                riscado ? "text-muted-foreground line-through" : undefined
+                status === "cancelada"
+                  ? "text-muted-foreground line-through"
+                  : status === "concluida"
+                    ? "text-muted-foreground"
+                    : undefined
               }
             >
               {formatData(row.original.data_hora)}
@@ -305,22 +297,7 @@ export function RemadasTabela({ dados }: Props) {
         },
         sortingFn: "alphanumeric",
       },
-      {
-        id: "status",
-        accessorKey: "status",
-        header: ({ column }) => (
-          <CabecalhoOrdenavel
-            title="Status"
-            sorted={column.getIsSorted()}
-            onSort={() =>
-              column.toggleSorting(column.getIsSorted() === "asc")
-            }
-          />
-        ),
-        cell: ({ row }) => <BadgeStatus status={row.original.status} />,
-        sortingFn: (a, b) =>
-          ORDEM_STATUS[a.original.status] - ORDEM_STATUS[b.original.status],
-      },
+      // 2 — Horário
       {
         id: "horario",
         accessorFn: (row) => {
@@ -331,17 +308,19 @@ export function RemadasTabela({ dados }: Props) {
           <CabecalhoOrdenavel
             title="Horário"
             sorted={column.getIsSorted()}
-            onSort={() =>
-              column.toggleSorting(column.getIsSorted() === "asc")
-            }
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
           />
         ),
         cell: ({ row }) => {
-          const riscado = row.original.status === "cancelada";
+          const { status } = row.original;
           return (
             <span
               className={
-                riscado ? "text-muted-foreground line-through" : undefined
+                status === "cancelada"
+                  ? "text-muted-foreground line-through"
+                  : status === "concluida"
+                    ? "text-muted-foreground"
+                    : undefined
               }
             >
               {formatHora(row.original.data_hora)}
@@ -350,26 +329,75 @@ export function RemadasTabela({ dados }: Props) {
         },
         sortingFn: "basic",
       },
+      // 3 — Status
       {
+        id: "status",
+        accessorKey: "status",
+        header: ({ column }) => (
+          <CabecalhoOrdenavel
+            title="Status"
+            sorted={column.getIsSorted()}
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          />
+        ),
+        cell: ({ row }) => <BadgeStatus status={row.original.status} />,
+        sortingFn: (a, b) =>
+          ORDEM_STATUS[a.original.status] - ORDEM_STATUS[b.original.status],
+      },
+      // 4 — Vagas (total)
+      {
+        id: "vagas",
         accessorKey: "vagas",
         header: ({ column }) => (
           <CabecalhoOrdenavel
             title="Vagas"
             sorted={column.getIsSorted()}
-            onSort={() =>
-              column.toggleSorting(column.getIsSorted() === "asc")
-            }
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
           />
         ),
         cell: ({ row }) => row.original.vagas,
+        sortingFn: "basic",
       },
+      // 5 — Preenchidas
       {
-        id: "acoes",
-        header: () => (
-          <span className="block pr-2 text-left text-sm font-medium">
-            Ações
+        id: "preenchidas",
+        accessorKey: "preenchidas",
+        header: ({ column }) => (
+          <CabecalhoOrdenavel
+            title="Preenchidas"
+            sorted={column.getIsSorted()}
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          />
+        ),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {row.original.preenchidas}
           </span>
         ),
+        sortingFn: "basic",
+      },
+      // 6 — Disponíveis
+      {
+        id: "disponiveis",
+        accessorFn: (row) => Math.max(0, row.vagas - row.preenchidas),
+        header: ({ column }) => (
+          <CabecalhoOrdenavel
+            title="Disponíveis"
+            sorted={column.getIsSorted()}
+            onSort={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          />
+        ),
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {Math.max(0, row.original.vagas - row.original.preenchidas)}
+          </span>
+        ),
+        sortingFn: "basic",
+      },
+      // 7 — Ações
+      {
+        id: "acoes",
+        header: () => null,
         cell: ({ row }) => (
           <CelulaAcoes
             remada={row.original}
@@ -410,9 +438,7 @@ export function RemadasTabela({ dados }: Props) {
                   <TableHead
                     key={h.id}
                     className={
-                      h.column.id === "acoes"
-                        ? "w-[1%] min-w-[3.5rem] text-right"
-                        : undefined
+                      h.column.id === "acoes" ? "w-[1%] min-w-[3rem]" : undefined
                     }
                   >
                     {h.isPlaceholder
@@ -435,14 +461,9 @@ export function RemadasTabela({ dados }: Props) {
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className="group/row">
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={
-                        cell.column.id === "acoes" ? "text-right" : undefined
-                      }
-                    >
+                    <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
