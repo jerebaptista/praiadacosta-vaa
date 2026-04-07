@@ -10,7 +10,10 @@ import {
   linhasParaSaldo,
 } from "@/lib/creditos-normalize";
 import { saldoCreditos } from "@/lib/creditos-saldo";
-import { fetchCreditosDoAluno } from "@/lib/fetch-creditos-aluno";
+import {
+  fetchCreditosDoAluno,
+  type FonteCreditos,
+} from "@/lib/fetch-creditos-aluno";
 import { mesAtualPrimeiroDia } from "@/lib/dates";
 import {
   MOTIVO_CREDITO_LABEL,
@@ -18,9 +21,16 @@ import {
   STATUS_ALUNO_LABEL,
   STATUS_CREDITO_LABEL,
 } from "@/lib/labels";
+import {
+  ALUNOS_SELECT_LISTAGEM_ADMIN,
+  alunoCriadoEmIso,
+} from "@/lib/alunos-form-data";
+import { useDataMock } from "@/lib/data-mock";
+import { getMockDb } from "@/lib/mock-data/store";
 import { pickRemadaDataHora } from "@/lib/remada-display";
+import { formatarTelefoneBrasilExibicao } from "@/lib/telefone-br";
 import { createClient } from "@/lib/supabase/server";
-import { formatPostgrestError } from "@/lib/supabase-error";
+import { formatPostgrestError, supabaseErroEhRede } from "@/lib/supabase-error";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +61,12 @@ export default async function AlunoPerfilPage({
 }) {
   const { id } = await params;
 
+  const mock = useDataMock();
+
   if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    !mock &&
+    (!process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   ) {
     return (
       <PageShell>
@@ -62,88 +75,143 @@ export default async function AlunoPerfilPage({
     );
   }
 
-  const supabase = await createClient();
   const mes = mesAtualPrimeiroDia();
 
-  const { data: aluno, error: errAluno } = await supabase
-    .from("alunos")
-    .select("id, nome, email, telefone, data_nascimento, status, criado_em")
-    .eq("id", id)
-    .maybeSingle();
+  type AlunoCab = {
+    id: string;
+    nome: string;
+    email: string | null;
+    telefone: string | null;
+    data_nascimento: string | null;
+    status: string;
+    criado_em: string | null;
+  };
 
-  if (errAluno) {
-    return (
-      <PageShell>
-        <QueryErrorPanel
-          message={formatPostgrestError(errAluno)}
-          contexto="Operação: leitura (GET) do aluno por id."
-        />
-      </PageShell>
+  let aluno: AlunoCab;
+  let pagamentoMes: { status: string; pago_em: string | null } | null;
+  let creditosErro: { message: string } | null;
+  let creditosList: Record<string, unknown>[];
+  let saldo: { disponiveis: number; usados: number; expirados: number };
+  let fonteCreditos: FonteCreditos | null;
+  const remadaMap = new Map<string, Record<string, unknown>>();
+  let agendamentosRows: AgRow[] = [];
+
+  if (mock) {
+    const row = getMockDb().alunos.find((a) => String(a.id) === id);
+    if (!row) notFound();
+    aluno = {
+      id: String(row.id),
+      nome: String(row.nome ?? ""),
+      email: row.email ? String(row.email) : null,
+      telefone: row.telefone ? String(row.telefone) : null,
+      data_nascimento: row.data_nascimento ? String(row.data_nascimento) : null,
+      status: String(row.status ?? "ativo"),
+      criado_em: alunoCriadoEmIso(row as Record<string, unknown>),
+    };
+    pagamentoMes =
+      getMockDb().pagamentos.find((p) => p.aluno_id === id && p.mes === mes) ??
+      null;
+    creditosErro = null;
+    creditosList = [];
+    saldo = { disponiveis: 0, usados: 0, expirados: 0 };
+    fonteCreditos = "creditos" satisfies FonteCreditos;
+  } else {
+    const supabase = await createClient();
+
+    const { data: alunoDb, error: errAluno } = await supabase
+      .from("alunos")
+      .select(ALUNOS_SELECT_LISTAGEM_ADMIN)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (errAluno) {
+      return (
+        <PageShell>
+          <QueryErrorPanel
+            message={formatPostgrestError(errAluno)}
+            contexto="Operação: leitura (GET) do aluno por id."
+            erroRede={supabaseErroEhRede(errAluno)}
+          />
+        </PageShell>
+      );
+    }
+
+    if (!alunoDb) notFound();
+
+    const alunoRaw = alunoDb as Record<string, unknown>;
+    aluno = {
+      id: String(alunoRaw.id ?? ""),
+      nome: String(alunoRaw.nome ?? ""),
+      email: alunoRaw.email ? String(alunoRaw.email) : null,
+      telefone: alunoRaw.telefone ? String(alunoRaw.telefone) : null,
+      data_nascimento: alunoRaw.data_nascimento
+        ? String(alunoRaw.data_nascimento)
+        : null,
+      status: String(alunoRaw.status ?? "ativo"),
+      criado_em: alunoCriadoEmIso(alunoRaw),
+    };
+
+    const { data: pagMes } = await supabase
+      .from("pagamentos_mensais")
+      .select("status, pago_em")
+      .eq("aluno_id", id)
+      .eq("mes", mes)
+      .maybeSingle();
+
+    pagamentoMes = pagMes ?? null;
+
+    const {
+      rows: creditosRaw,
+      erro: creditosErroObj,
+      fonte: fc,
+    } = await fetchCreditosDoAluno(supabase, id);
+
+    creditosErro = creditosErroObj;
+    creditosList = [...creditosRaw].sort((a, b) =>
+      creditoSortTime(b) - creditoSortTime(a)
     );
+    saldo =
+      fc === "creditos_aula"
+        ? saldoCreditosAula(creditosList)
+        : saldoCreditos(linhasParaSaldo(creditosList));
+    fonteCreditos = fc;
+
+    const agRes = await supabase
+      .from("agendamentos")
+      .select("id, remada_id, status, criado_em, remadas(*)")
+      .eq("aluno_id", id)
+      .order("criado_em", { ascending: false, nullsFirst: false });
+
+    if (!agRes.error && agRes.data) {
+      agendamentosRows = agRes.data as AgRow[];
+    } else {
+      const plain = await supabase
+        .from("agendamentos")
+        .select("id, remada_id, status, criado_em")
+        .eq("aluno_id", id)
+        .order("criado_em", { ascending: false, nullsFirst: false });
+
+      agendamentosRows = (plain.data ?? []) as AgRow[];
+      const ids = [
+        ...new Set(
+          agendamentosRows.map((a) => a.remada_id).filter(Boolean) as string[]
+        ),
+      ];
+      if (ids.length) {
+        const { data: rems } = await supabase
+          .from("remadas")
+          .select("*")
+          .in("id", ids);
+        rems?.forEach((row) => {
+          remadaMap.set(String(row.id), row as Record<string, unknown>);
+        });
+      }
+    }
   }
-
-  if (!aluno) notFound();
-
-  const { data: pagamentoMes } = await supabase
-    .from("pagamentos_mensais")
-    .select("status, pago_em")
-    .eq("aluno_id", id)
-    .eq("mes", mes)
-    .maybeSingle();
 
   const statusPag =
     (pagamentoMes?.status as "pendente" | "pago") ?? "pendente";
   const pagPago = statusPag === "pago";
-
-  const {
-    rows: creditosRaw,
-    erro: creditosErroObj,
-    fonte: fonteCreditos,
-  } = await fetchCreditosDoAluno(supabase, id);
-
-  const creditosErro = creditosErroObj;
-  const creditosList = [...creditosRaw].sort(
-    (a, b) => creditoSortTime(b) - creditoSortTime(a)
-  );
-  const saldo =
-    fonteCreditos === "creditos_aula"
-      ? saldoCreditosAula(creditosList)
-      : saldoCreditos(linhasParaSaldo(creditosList));
-
-  const remadaMap = new Map<string, Record<string, unknown>>();
-  let agendamentosRows: AgRow[] = [];
-
-  const agRes = await supabase
-    .from("agendamentos")
-    .select("id, remada_id, status, criado_em, remadas(*)")
-    .eq("aluno_id", id)
-    .order("criado_em", { ascending: false, nullsFirst: false });
-
-  if (!agRes.error && agRes.data) {
-    agendamentosRows = agRes.data as AgRow[];
-  } else {
-    const plain = await supabase
-      .from("agendamentos")
-      .select("id, remada_id, status, criado_em")
-      .eq("aluno_id", id)
-      .order("criado_em", { ascending: false, nullsFirst: false });
-
-    agendamentosRows = (plain.data ?? []) as AgRow[];
-    const ids = [
-      ...new Set(
-        agendamentosRows.map((a) => a.remada_id).filter(Boolean) as string[]
-      ),
-    ];
-    if (ids.length) {
-      const { data: rems } = await supabase
-        .from("remadas")
-        .select("*")
-        .in("id", ids);
-      rems?.forEach((row) => {
-        remadaMap.set(String(row.id), row as Record<string, unknown>);
-      });
-    }
-  }
 
   return (
     <PageShell>
@@ -187,7 +255,11 @@ export default async function AlunoPerfilPage({
             <dt className="text-xs font-medium uppercase text-zinc-500">
               Telefone
             </dt>
-            <dd className="text-sm text-zinc-900">{aluno.telefone ?? "—"}</dd>
+            <dd className="text-sm text-zinc-900">
+              {aluno.telefone
+                ? formatarTelefoneBrasilExibicao(aluno.telefone)
+                : "—"}
+            </dd>
           </div>
           <div>
             <dt className="text-xs font-medium uppercase text-zinc-500">

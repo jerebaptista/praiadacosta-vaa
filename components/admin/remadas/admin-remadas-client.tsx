@@ -30,7 +30,7 @@ const MESES = Array.from({ length: 12 }, (_, i) => i);
 type FiltroStatus = "todos" | RemadaStatus;
 
 type Props = {
-  initialRemadas: RemadaLinha[];
+  initialRemadas: RemadaLinha[];  
 };
 
 export function AdminRemadasClient({ initialRemadas }: Props) {
@@ -78,7 +78,12 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Remadas</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Remadas</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Acompanhe e gerencie todas as remadas do mês.
+          </p>
+        </div>
         <Button
           type="button"
           className="shrink-0 gap-2"

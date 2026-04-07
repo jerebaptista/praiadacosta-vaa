@@ -1,12 +1,19 @@
+import type { PostgrestError } from "@supabase/supabase-js";
 import Link from "next/link";
 import { MonthNav } from "@/components/pagamentos/MonthNav";
 import { PaymentToggle } from "@/components/pagamentos/PaymentToggle";
 import { ConfiguracaoSupabase } from "@/components/ConfiguracaoSupabase";
 import { PageShell } from "@/components/PageShell";
 import { QueryErrorPanel } from "@/components/QueryErrorPanel";
+import { useDataMock } from "@/lib/data-mock";
+import {
+  mockAlunosParaPagamentos,
+  mockPagamentosDoMes,
+} from "@/lib/mock-data/server";
 import { createClient } from "@/lib/supabase/server";
 import { mesFromSearchParam } from "@/lib/mes-query";
-import { formatPostgrestError } from "@/lib/supabase-error";
+import { formatPostgrestError, supabaseErroEhRede } from "@/lib/supabase-error";
+import { formatarTelefoneBrasilExibicao } from "@/lib/telefone-br";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +27,12 @@ export default async function PagamentosPage({
   const sp = await searchParams;
   const mes = mesFromSearchParam(sp.mes);
 
+  const mock = useDataMock();
+
   if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    !mock &&
+    (!process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   ) {
     return (
       <PageShell>
@@ -31,17 +41,42 @@ export default async function PagamentosPage({
     );
   }
 
-  const supabase = await createClient();
+  let alunos: {
+    id: string;
+    nome: string;
+    email: string | null;
+    telefone: string | null;
+    status: string;
+  }[];
+  let pagamentos: { aluno_id: string; status: string; pago_em: string | null }[];
+  let errAlunos: PostgrestError | null = null;
+  let errPag: PostgrestError | null = null;
 
-  const { data: alunos, error: errAlunos } = await supabase
-    .from("alunos")
-    .select("id, nome, email, telefone, status")
-    .order("nome");
+  if (mock) {
+    alunos = mockAlunosParaPagamentos();
+    pagamentos = mockPagamentosDoMes(mes).map((p) => ({
+      aluno_id: p.aluno_id,
+      status: p.status,
+      pago_em: p.pago_em,
+    }));
+  } else {
+    const supabase = await createClient();
 
-  const { data: pagamentos, error: errPag } = await supabase
-    .from("pagamentos_mensais")
-    .select("aluno_id, status, pago_em")
-    .eq("mes", mes);
+    const aRes = await supabase
+      .from("alunos")
+      .select("id, nome, email, telefone, status")
+      .order("nome");
+
+    const pRes = await supabase
+      .from("pagamentos_mensais")
+      .select("aluno_id, status, pago_em")
+      .eq("mes", mes);
+
+    errAlunos = aRes.error;
+    errPag = pRes.error;
+    alunos = (aRes.data ?? []) as typeof alunos;
+    pagamentos = (pRes.data ?? []) as typeof pagamentos;
+  }
 
   if (errAlunos || errPag) {
     const partes = [
@@ -54,6 +89,10 @@ export default async function PagamentosPage({
         <QueryErrorPanel
           message={partes.join("\n\n")}
           contexto="Operação: leitura (GET) nas tabelas alunos e pagamentos_mensais."
+          erroRede={
+            supabaseErroEhRede(errAlunos ?? undefined) ||
+            supabaseErroEhRede(errPag ?? undefined)
+          }
         />
       </PageShell>
     );
@@ -103,7 +142,12 @@ export default async function PagamentosPage({
                   {a.nome}
                 </Link>
                 <p className="truncate text-xs text-muted-foreground">
-                  {[a.email, a.telefone].filter(Boolean).join(" · ") || "—"}
+                  {[
+                    a.email,
+                    a.telefone ? formatarTelefoneBrasilExibicao(a.telefone) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
                 </p>
                 {isPago && p?.pago_em && (
                   <p className="mt-0.5 text-xs text-muted-foreground">

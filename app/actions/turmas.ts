@@ -1,6 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { useDataMock } from "@/lib/data-mock";
+import {
+  mockAlterarStatusTurma,
+  mockApagarTurma,
+  mockAtualizarTurma,
+  mockCriarTurma,
+  mockListarTurmas,
+} from "@/lib/mock-data/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatPostgrestError } from "@/lib/supabase-error";
 import {
@@ -34,28 +42,42 @@ function sanitizarVagas(v: unknown): number | null {
 }
 
 export type CriarTurmaInput = {
-  nome?: string;
   dias_semana: number[];
   hora: string;
   vagas: number | string;
 };
 
 export async function listarTurmas(): Promise<TurmaLinha[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("turmas")
-    .select("*")
-    .order("created_at", { ascending: true });
+  if (useDataMock()) return mockListarTurmas();
 
-  if (error) {
-    // Tabela ainda não existe (42P01) — retorna vazio enquanto a migração não é executada.
-    if ((error as { code?: string }).code === "42P01") return [];
-    throw new Error(formatPostgrestError(error));
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("turmas")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      if ((error as { code?: string }).code === "42P01") return [];
+      throw new Error(formatPostgrestError(error));
+    }
+
+    return (data ?? [])
+      .map((r) => mapearLinhaTurma(r as Record<string, unknown>))
+      .filter((r): r is TurmaLinha => r != null);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isRede =
+      msg.includes("fetch failed") ||
+      msg.includes("ECONNRESET") ||
+      msg.includes("ConnectTimeout") ||
+      msg.includes("UND_ERR");
+    if (isRede) {
+      console.warn("[turmas] Sem ligação ao Supabase — a devolver lista vazia.");
+      return [];
+    }
+    throw e;
   }
-
-  return (data ?? [])
-    .map((r) => mapearLinhaTurma(r as Record<string, unknown>))
-    .filter((r): r is TurmaLinha => r != null);
 }
 
 export async function criarTurma(input: CriarTurmaInput): Promise<TurmaLinha> {
@@ -70,15 +92,23 @@ export async function criarTurma(input: CriarTurmaInput): Promise<TurmaLinha> {
   if (vagas == null)
     throw new Error(`Vagas deve ser entre ${TURMA_VAGAS_MIN} e ${TURMA_VAGAS_MAX}.`);
 
-  const nome =
-    typeof input.nome === "string" && input.nome.trim()
-      ? input.nome.trim().slice(0, 120)
-      : "";
+  if (useDataMock()) {
+    const linha = mockCriarTurma({
+      nome: "",
+      dias_semana: dias,
+      hora,
+      vagas,
+      status: "ativa",
+    });
+    revalidatePath("/admin/turmas");
+    revalidatePath("/alunos");
+    return linha;
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turmas")
-    .insert({ nome, dias_semana: dias, hora, vagas, status: "ativa" })
+    .insert({ nome: "", dias_semana: dias, hora, vagas, status: "ativa" })
     .select("*")
     .single();
 
@@ -109,15 +139,17 @@ export async function atualizarTurma(
   if (vagas == null)
     throw new Error(`Vagas deve ser entre ${TURMA_VAGAS_MIN} e ${TURMA_VAGAS_MAX}.`);
 
-  const nome =
-    typeof input.nome === "string" && input.nome.trim()
-      ? input.nome.trim().slice(0, 120)
-      : "";
+  if (useDataMock()) {
+    mockAtualizarTurma(tid, { dias_semana: dias, hora, vagas });
+    revalidatePath("/admin/turmas");
+    revalidatePath("/alunos");
+    return;
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("turmas")
-    .update({ nome, dias_semana: dias, hora, vagas })
+    .update({ dias_semana: dias, hora, vagas })
     .eq("id", tid);
 
   if (error) throw new Error(formatPostgrestError(error));
@@ -130,6 +162,13 @@ export async function alterarStatusTurma(
 ): Promise<void> {
   const tid = id?.trim();
   if (!tid) throw new Error("Turma inválida.");
+
+  if (useDataMock()) {
+    mockAlterarStatusTurma(tid, status);
+    revalidatePath("/admin/turmas");
+    revalidatePath("/alunos");
+    return;
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -144,6 +183,13 @@ export async function alterarStatusTurma(
 export async function apagarTurma(id: string): Promise<void> {
   const tid = id?.trim();
   if (!tid) throw new Error("Turma inválida.");
+
+  if (useDataMock()) {
+    mockApagarTurma(tid);
+    revalidatePath("/admin/turmas");
+    revalidatePath("/alunos");
+    return;
+  }
 
   const supabase = await createClient();
   const { error } = await supabase.from("turmas").delete().eq("id", tid);

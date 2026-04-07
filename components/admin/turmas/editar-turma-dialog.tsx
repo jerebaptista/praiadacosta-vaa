@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { atualizarTurma } from "@/app/actions/turmas";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,12 +21,12 @@ type Props = {
   turma: TurmaLinha | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  turmasExistentes: TurmaLinha[];
 };
 
 function turmaParaForm(t: TurmaLinha): TurmaFormState {
   const [h, m] = t.hora.split(":");
   return {
-    nome: t.nome,
     dias_semana: t.dias_semana,
     horaH: (h ?? "07").padStart(2, "0"),
     horaM: (m ?? "00").padStart(2, "0"),
@@ -34,9 +34,29 @@ function turmaParaForm(t: TurmaLinha): TurmaFormState {
   };
 }
 
-export function EditarTurmaDialog({ turma, open, onOpenChange }: Props) {
+/** Devolve os dias da semana já ocupados por outra turma com o mesmo horário. */
+function diasOcupadosParaHora(
+  hora: string,
+  turmas: TurmaLinha[],
+  excluirId?: string
+): number[] {
+  const ocupados = new Set<number>();
+  for (const t of turmas) {
+    if (excluirId && t.id === excluirId) continue;
+    if (t.hora.slice(0, 5) === hora.slice(0, 5)) {
+      t.dias_semana.forEach((d) => ocupados.add(d));
+    }
+  }
+  return Array.from(ocupados);
+}
+
+export function EditarTurmaDialog({
+  turma,
+  open,
+  onOpenChange,
+  turmasExistentes,
+}: Props) {
   const [form, setForm] = useState<TurmaFormState>({
-    nome: "",
     dias_semana: [],
     horaH: "07",
     horaM: "00",
@@ -52,15 +72,30 @@ export function EditarTurmaDialog({ turma, open, onOpenChange }: Props) {
     }
   }, [open, turma]);
 
+  const diasBloqueados = useMemo(
+    () => diasOcupadosParaHora(`${form.horaH}:${form.horaM}`, turmasExistentes, turma?.id),
+    [form.horaH, form.horaM, turmasExistentes, turma?.id]
+  );
+
   function patch(p: Partial<TurmaFormState>) {
-    setForm((f) => ({ ...f, ...p }));
+    setForm((f) => {
+      const novo = { ...f, ...p };
+      // quando o horário muda, remove os dias que ficam bloqueados
+      if (p.horaH !== undefined || p.horaM !== undefined) {
+        const hora = `${novo.horaH}:${novo.horaM}`;
+        const bloqueados = diasOcupadosParaHora(hora, turmasExistentes, turma?.id);
+        novo.dias_semana = novo.dias_semana.filter((d) => !bloqueados.includes(d));
+      }
+      return novo;
+    });
   }
 
   async function handleSalvar() {
     if (!turma) return;
     setErro(null);
-    if (form.dias_semana.length === 0) {
-      setErro("Selecione pelo menos um dia da semana.");
+    const diasValidos = form.dias_semana.filter((d) => !diasBloqueados.includes(d));
+    if (diasValidos.length === 0) {
+      setErro("Selecione pelo menos um dia da semana disponível.");
       return;
     }
     const vagas = normalizarVagas(form.vagasStr);
@@ -72,8 +107,7 @@ export function EditarTurmaDialog({ turma, open, onOpenChange }: Props) {
     setSalvando(true);
     try {
       await atualizarTurma(turma.id, {
-        nome: form.nome,
-        dias_semana: form.dias_semana,
+        dias_semana: diasValidos,
         hora: `${form.horaH}:${form.horaM}`,
         vagas,
       });
@@ -92,7 +126,7 @@ export function EditarTurmaDialog({ turma, open, onOpenChange }: Props) {
           <DialogTitle>Editar turma</DialogTitle>
         </DialogHeader>
 
-        <TurmaFormFields state={form} onChange={patch} />
+        <TurmaFormFields state={form} onChange={patch} diasBloqueados={diasBloqueados} />
 
         {erro ? (
           <p className="text-sm text-destructive" role="alert">

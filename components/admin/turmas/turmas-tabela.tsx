@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Ban,
   CheckCircle2,
@@ -28,30 +29,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { alterarStatusTurma, apagarTurma } from "@/app/actions/turmas";
 import { LABEL_DIA_SEMANA, ORDEM_DIA_SEMANA } from "@/lib/remadas-geracao";
-import { labelTurmaAuto, type TurmaLinha } from "@/lib/turmas-tipos";
+import { type TurmaAluno, type TurmaLinha } from "@/lib/turmas-tipos";
 import { EditarTurmaDialog } from "@/components/admin/turmas/editar-turma-dialog";
-import { useRouter } from "next/navigation";
 
 function BadgeStatusTurma({ status }: { status: TurmaLinha["status"] }) {
   if (status === "inativa") {
     return (
-      <Badge
-        variant="outline"
-        className="border-transparent bg-muted/50 text-muted-foreground"
-      >
+      <Badge variant="outline" className="border-border bg-muted/60 font-normal text-muted-foreground">
         Inativa
       </Badge>
     );
   }
   return (
-    <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-normal text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-400">
       Ativa
     </Badge>
   );
@@ -76,12 +82,41 @@ function PilasDias({ dias }: { dias: number[] }) {
   );
 }
 
-type CelulaAcoesProps = {
-  turma: TurmaLinha;
-  onEditar: () => void;
-};
+function iniciais(nome: string): string {
+  return nome
+    .split(" ")
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-function CelulaAcoes({ turma, onEditar }: CelulaAcoesProps) {
+function CelulaAlunos({ alunos }: { alunos: TurmaAluno[] }) {
+  if (alunos.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+
+  const MAX = 3;
+  const visiveis = alunos.slice(0, MAX);
+  const extra = alunos.length - MAX;
+
+  return (
+    <AvatarGroup>
+      {visiveis.map((a) => (
+        <Avatar key={a.id} size="sm">
+          {a.avatar_url ? (
+            <AvatarImage src={a.avatar_url} alt={a.nome} />
+          ) : null}
+          <AvatarFallback className="text-[10px]">{iniciais(a.nome)}</AvatarFallback>
+        </Avatar>
+      ))}
+      {extra > 0 && (
+        <AvatarGroupCount className="size-6 text-xs">+{extra}</AvatarGroupCount>
+      )}
+    </AvatarGroup>
+  );
+}
+
+function CelulaAcoes({ turma, onEditar }: { turma: TurmaLinha; onEditar: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmApagar, setConfirmApagar] = useState(false);
@@ -109,38 +144,38 @@ function CelulaAcoes({ turma, onEditar }: CelulaAcoesProps) {
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8"
+            className="size-8 opacity-0 transition-opacity group-hover/row:opacity-100 data-[state=open]:opacity-100"
             disabled={pending}
           >
             <MoreHorizontal className="size-4" />
             <span className="sr-only">Ações</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="min-w-44">
           <DropdownMenuItem onClick={onEditar}>
-            <Pencil className="mr-2 size-4" />
+            <Pencil className="size-4" />
             Editar
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={toggleStatus}>
             {turma.status === "ativa" ? (
               <>
-                <Ban className="mr-2 size-4" />
+                <Ban className="size-4" />
                 Desativar
               </>
             ) : (
               <>
-                <CheckCircle2 className="mr-2 size-4" />
+                <CheckCircle2 className="size-4" />
                 Ativar
               </>
             )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
+            variant="destructive"
             onClick={() => setConfirmApagar(true)}
           >
-            <Trash2 className="mr-2 size-4" />
+            <Trash2 className="size-4" />
             Apagar
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -151,8 +186,7 @@ function CelulaAcoes({ turma, onEditar }: CelulaAcoesProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Apagar turma?</AlertDialogTitle>
             <AlertDialogDescription>
-              A turma <strong>{turma.nome || labelTurmaAuto(turma)}</strong>{" "}
-              será removida permanentemente.
+              Esta turma será removida permanentemente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -172,9 +206,10 @@ function CelulaAcoes({ turma, onEditar }: CelulaAcoesProps) {
 
 type Props = {
   turmas: TurmaLinha[];
+  turmasExistentes: TurmaLinha[];
 };
 
-export function TurmasTabela({ turmas }: Props) {
+export function TurmasTabela({ turmas, turmasExistentes }: Props) {
   const [turmaEditando, setTurmaEditando] = useState<TurmaLinha | null>(null);
 
   if (turmas.length === 0) {
@@ -187,63 +222,43 @@ export function TurmasTabela({ turmas }: Props) {
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <th className="px-4 py-3 text-left">Nome</th>
-              <th className="px-4 py-3 text-left">Dias</th>
-              <th className="px-4 py-3 text-left">Horário</th>
-              <th className="px-4 py-3 text-center">Vagas</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="min-w-[56px] px-4 py-3 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {turmas.map((t, i) => (
-              <tr
-                key={t.id}
-                className={
-                  i % 2 === 0
-                    ? "border-b border-border/60 bg-transparent"
-                    : "border-b border-border/60 bg-muted/20"
-                }
-              >
-                <td className="px-4 py-3 font-medium">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="max-w-[200px] truncate block">
-                        {t.nome || labelTurmaAuto(t)}
-                      </span>
-                    </TooltipTrigger>
-                    {t.nome ? (
-                      <TooltipContent side="bottom">
-                        {labelTurmaAuto(t)}
-                      </TooltipContent>
-                    ) : null}
-                  </Tooltip>
-                </td>
-                <td className="px-4 py-3">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Dias</TableHead>
+              <TableHead>Horário</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Vagas</TableHead>
+              <TableHead>Alunos</TableHead>
+              <TableHead className="w-[1%] min-w-[3rem]" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {turmas.map((t) => (
+              <TableRow key={t.id} className="group/row">
+                <TableCell>
                   <PilasDias dias={t.dias_semana} />
-                </td>
-                <td className="px-4 py-3 tabular-nums">{t.hora}</td>
-                <td className="px-4 py-3 text-center tabular-nums">
-                  {t.vagas}
-                </td>
-                <td className="px-4 py-3">
+                </TableCell>
+                <TableCell>{t.hora}</TableCell>
+                <TableCell>
                   <BadgeStatusTurma status={t.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
+                </TableCell>
+                <TableCell>{t.vagas}</TableCell>
+                <TableCell>
+                  <CelulaAlunos alunos={t.alunos} />
+                </TableCell>
+                <TableCell className="text-right">
                   <CelulaAcoes
                     turma={t}
                     onEditar={() => setTurmaEditando(t)}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <EditarTurmaDialog
@@ -252,7 +267,8 @@ export function TurmasTabela({ turmas }: Props) {
         onOpenChange={(o) => {
           if (!o) setTurmaEditando(null);
         }}
+        turmasExistentes={turmasExistentes}
       />
-    </TooltipProvider>
+    </>
   );
 }

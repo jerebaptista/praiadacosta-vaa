@@ -2,6 +2,12 @@ import { LABEL_DIA_SEMANA, ORDEM_DIA_SEMANA } from "@/lib/remadas-geracao";
 
 export type TurmaStatus = "ativa" | "inativa";
 
+export type TurmaAluno = {
+  id: string;
+  nome: string;
+  avatar_url?: string | null;
+};
+
 export type TurmaLinha = {
   id: string;
   nome: string;
@@ -11,6 +17,8 @@ export type TurmaLinha = {
   hora: string;
   vagas: number;
   status: TurmaStatus;
+  /** Alunos inscritos nesta turma (populated quando disponível). */
+  alunos: TurmaAluno[];
   created_at: string;
 };
 
@@ -63,6 +71,7 @@ export function mapearLinhaTurma(
     hora,
     vagas,
     status,
+    alunos: [],
     created_at:
       typeof row.created_at === "string"
         ? row.created_at

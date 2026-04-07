@@ -1,6 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { useDataMock } from "@/lib/data-mock";
+import {
+  mockApagarRemada,
+  mockApagarTodasRemadas,
+  mockAtualizarRemada,
+  mockCancelarRemada,
+  mockCriarRemadasInsert,
+  mockListarRemadasAdmin,
+  mockMarcarRemadaAgendada,
+  mockMarcarRemadaConcluida,
+  mockSincronizarRemadasAtrasadasOnly,
+} from "@/lib/mock-data/server";
 import {
   combinarDataHoraLocal,
   gerarLinhasRemada,
@@ -37,6 +49,11 @@ import {
  * ou `REMADAS_STATUS_AO_CONCLUIR` no `.env.local`.
  */
 export async function sincronizarRemadasAgendadasAtrasadas(): Promise<void> {
+  if (useDataMock()) {
+    mockSincronizarRemadasAtrasadasOnly();
+    return;
+  }
+
   try {
     const supabase = await createClient();
     const agora = new Date().toISOString();
@@ -59,25 +76,47 @@ export async function sincronizarRemadasAgendadasAtrasadas(): Promise<void> {
 }
 
 export async function listarRemadasAdmin(): Promise<RemadaLinha[]> {
-  await sincronizarRemadasAgendadasAtrasadas();
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("remadas").select("*");
-
-  if (error) {
-    throw new Error(formatPostgrestError(error));
+  try {
+    await sincronizarRemadasAgendadasAtrasadas();
+  } catch {
+    // sync failure não deve bloquear a listagem
   }
 
-  // Usar um único instante de referência do servidor para todo o lote.
-  const agora = new Date();
+  if (useDataMock()) {
+    try {
+      return mockListarRemadasAdmin();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn("[remadas mock]", msg);
+      return [];
+    }
+  }
 
-  const linhas = (data ?? [])
-    .map((row) =>
-      mapearLinhaRemadaAdmin(row as Record<string, unknown>, agora)
-    )
-    .filter((r): r is RemadaLinha => r != null);
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("remadas").select("*");
 
-  return ordenarRemadasPorDataHora(linhas);
+    if (error) throw new Error(formatPostgrestError(error));
+
+    const agora = new Date();
+    const linhas = (data ?? [])
+      .map((row) => mapearLinhaRemadaAdmin(row as Record<string, unknown>, agora))
+      .filter((r): r is RemadaLinha => r != null);
+
+    return ordenarRemadasPorDataHora(linhas);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const isRede =
+      msg.includes("fetch failed") ||
+      msg.includes("ECONNRESET") ||
+      msg.includes("ConnectTimeout") ||
+      msg.includes("UND_ERR");
+    if (isRede) {
+      console.warn("[remadas] Sem ligação ao Supabase — a devolver lista vazia.");
+      return [];
+    }
+    throw e;
+  }
 }
 
 /**
@@ -102,6 +141,21 @@ export async function criarRemadasLote(
     const { vagas, ...rest } = linhaParaInsertRemada(l);
     return { ...rest, [colVagas]: vagas };
   });
+
+  if (useDataMock()) {
+    const criadas = mockCriarRemadasInsert(
+      rows.map((r) => {
+        const rec = r as Record<string, unknown>;
+        return {
+          data_hora: String(rec.data_hora),
+          vagas: Number(rec[colVagas]),
+          status: String(rec.status ?? "agendada"),
+        };
+      })
+    );
+    revalidatePath("/admin/remadas");
+    return criadas;
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -128,6 +182,12 @@ export async function criarRemadasLote(
  * Falha se existir FK sem ON DELETE CASCADE (ex.: agendamentos a referenciar remada).
  */
 export async function apagarTodasRemadas(): Promise<void> {
+  if (useDataMock()) {
+    mockApagarTodasRemadas();
+    revalidatePath("/admin/remadas");
+    return;
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("remadas")
@@ -152,6 +212,12 @@ const STATUS_CANCELAR_FALLBACK = [
 export async function cancelarRemada(remadaId: string): Promise<void> {
   const id = remadaId?.trim();
   if (!id) throw new Error("Remada inválida.");
+
+  if (useDataMock()) {
+    mockCancelarRemada(id);
+    revalidatePath("/admin/remadas");
+    return;
+  }
 
   const supabase = await createClient();
   const preferido = statusValorGravarCancelamentoRemada();
@@ -191,6 +257,12 @@ export async function apagarRemada(remadaId: string): Promise<void> {
   const id = remadaId?.trim();
   if (!id) throw new Error("Remada inválida.");
 
+  if (useDataMock()) {
+    mockApagarRemada(id);
+    revalidatePath("/admin/remadas");
+    return;
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.from("remadas").delete().eq("id", id);
 
@@ -204,6 +276,12 @@ export async function apagarRemada(remadaId: string): Promise<void> {
 export async function marcarRemadaConcluida(remadaId: string): Promise<void> {
   const id = remadaId?.trim();
   if (!id) throw new Error("Remada inválida.");
+
+  if (useDataMock()) {
+    mockMarcarRemadaConcluida(id);
+    revalidatePath("/admin/remadas");
+    return;
+  }
 
   const supabase = await createClient();
   const preferido = statusValorGravarConcluidaRemada();
@@ -247,6 +325,12 @@ export async function marcarRemadaConcluida(remadaId: string): Promise<void> {
 export async function marcarRemadaAgendada(remadaId: string): Promise<void> {
   const id = remadaId?.trim();
   if (!id) throw new Error("Remada inválida.");
+
+  if (useDataMock()) {
+    mockMarcarRemadaAgendada(id);
+    revalidatePath("/admin/remadas");
+    return;
+  }
 
   const supabase = await createClient();
 
@@ -301,6 +385,13 @@ export async function atualizarRemada(
   if (!base) throw new Error("Data ou horário inválidos.");
 
   const colVagas = nomeColunaVagasRemada();
+
+  if (useDataMock()) {
+    mockAtualizarRemada(id, input);
+    revalidatePath("/admin/remadas");
+    return;
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("remadas")

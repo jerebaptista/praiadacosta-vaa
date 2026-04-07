@@ -283,7 +283,7 @@ export function CriarRemadaDialog({ open, onOpenChange, onSalvar }: Props) {
             disabled={salvando}
             onClick={() => void handleSalvar()}
           >
-            {salvando ? "Salvando…" : "Salvar"}
+            {salvando ? "Salvando…" : "Criar remada"}
           </Button>
         </DialogFooter>
       </DialogContent>

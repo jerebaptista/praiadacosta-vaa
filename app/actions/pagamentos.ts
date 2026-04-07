@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { useDataMock } from "@/lib/data-mock";
+import { mockAtualizarPagamentoMensal } from "@/lib/mock-data/server";
 import { createClient } from "@/lib/supabase/server";
 import { throwPostgrest } from "@/lib/supabase-error";
 
@@ -9,6 +11,13 @@ export async function atualizarPagamentoMensal(input: {
   mes: string;
   status: "pendente" | "pago";
 }) {
+  if (useDataMock()) {
+    mockAtualizarPagamentoMensal(input);
+    revalidatePath("/pagamentos");
+    revalidatePath(`/alunos/${input.alunoId}`);
+    return;
+  }
+
   const supabase = await createClient();
   const pagoEm = input.status === "pago" ? new Date().toISOString() : null;
 

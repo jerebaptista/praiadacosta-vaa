@@ -80,26 +80,20 @@ function formatHora(iso: string): string {
 function BadgeStatus({ status }: { status: RemadaStatus }) {
   if (status === "agendada") {
     return (
-      <Badge
-        variant="outline"
-        className="border-transparent bg-muted font-normal text-muted-foreground"
-      >
+      <Badge variant="outline" className="border-border bg-muted/60 font-normal text-muted-foreground">
         Agendada
       </Badge>
     );
   }
   if (status === "concluida") {
     return (
-      <Badge variant="secondary" className="font-normal">
+      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 font-normal text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-400">
         Concluída
       </Badge>
     );
   }
   return (
-    <Badge
-      variant="outline"
-      className="border-red-200/70 bg-red-500/10 font-normal text-red-700 dark:border-red-900/40 dark:bg-red-500/15 dark:text-red-300"
-    >
+    <Badge variant="outline" className="border-red-200 bg-red-50 font-normal text-red-600 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
       Cancelada
     </Badge>
   );
