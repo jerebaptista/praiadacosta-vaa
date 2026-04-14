@@ -28,7 +28,32 @@ import {
   REMADA_VAGAS_MAX,
   REMADA_VAGAS_MIN,
 } from "@/lib/remadas-validacao";
-import { getMockDb, mockNovoId, type MockRemadaRow, type MockTurmaRow } from "@/lib/mock-data/store";
+import { enriquecerPlanosComAlunos } from "@/lib/planos-enriquecimento";
+import { statusPagamentoApartirDeVencimento } from "@/lib/planos-aluno-pagamento";
+import {
+  periodoContratoParaAluno,
+  rotuloPeriodoContrato,
+  vencimentoAposInicio,
+} from "@/lib/planos-aluno-vigencia";
+import {
+  existeOutroPlanoComMesmoNome,
+  MSG_NOME_PLANO_DUPLICADO,
+} from "@/lib/planos-nome";
+import {
+  LIMITE_PLANOS_TOTAL,
+  MSG_LIMITE_PLANOS_TOTAL_CRIAR,
+  MSG_NAO_PODE_REMOVER_PLANO_COM_ALUNOS_ATIVOS,
+  type AlunoAtivoPlanoLinha,
+  type PlanoLinha,
+  type PlanoStatus,
+} from "@/lib/planos-tipos";
+import {
+  getMockDb,
+  mockNovoId,
+  type MockPlanoRow,
+  type MockRemadaRow,
+  type MockTurmaRow,
+} from "@/lib/mock-data/store";
 
 function isoNow() {
   return new Date().toISOString();
@@ -48,7 +73,182 @@ function clienteDesdeMock(row: Record<string, unknown>): string | null {
 
 /* ── Planos (listagem alunos) ── */
 export function mockPlanosOrdenadosPreco() {
-  return [...getMockDb().planos].sort((a, b) => a.preco_mensal - b.preco_mensal);
+  return [...getMockDb().planos].sort((a, b) => {
+    const ma = a.preco_mensal ?? Number.MAX_SAFE_INTEGER;
+    const mb = b.preco_mensal ?? Number.MAX_SAFE_INTEGER;
+    return ma - mb;
+  });
+}
+
+function alunosMockParaPlanos() {
+  return getMockDb().alunos.map((a) => ({
+    id: String(a.id),
+    nome: String(a.nome ?? ""),
+    avatar_url: a.avatar_url != null ? String(a.avatar_url) : null,
+    plano_id:
+      a.plano_id != null && String(a.plano_id).trim() !== ""
+        ? String(a.plano_id)
+        : null,
+    status: String(a.status ?? "ativo"),
+  }));
+}
+
+export function mockListarPlanos(): PlanoLinha[] {
+  const base = [...getMockDb().planos]
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+    .map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      status: p.status,
+      remadas_por_semana: p.remadas_por_semana,
+      preco_mensal: p.preco_mensal,
+      equivalente_mensal:
+        p.preco_mensal != null && p.preco_mensal > 0
+          ? null
+          : p.valor != null && p.valor > 0
+            ? p.valor
+            : null,
+      preco_trimestral: p.preco_trimestral ?? null,
+      preco_semestral: p.preco_semestral ?? null,
+      preco_anual: p.preco_anual ?? null,
+    }));
+  return enriquecerPlanosComAlunos(base, alunosMockParaPlanos());
+}
+
+export function mockContarPlanosAtivos(): number {
+  return getMockDb().planos.filter((p) => p.status === "ativo").length;
+}
+
+export function mockAlterarStatusPlano(id: string, status: PlanoStatus): void {
+  const p = getMockDb().planos.find((x) => x.id === id);
+  if (!p) throw new Error("Plano não encontrado (mock).");
+  p.status = status;
+}
+
+export function mockApagarPlano(id: string): void {
+  const db = getMockDb();
+  const idx = db.planos.findIndex((x) => x.id === id);
+  if (idx === -1) throw new Error("Plano não encontrado (mock).");
+  const ativos = db.alunos.filter(
+    (a) =>
+      String(a.plano_id ?? "") === id && String(a.status ?? "") === "ativo"
+  ).length;
+  if (ativos > 0) {
+    throw new Error(MSG_NAO_PODE_REMOVER_PLANO_COM_ALUNOS_ATIVOS);
+  }
+  for (const a of db.alunos) {
+    if (String(a.plano_id ?? "") === id) {
+      a.plano_id = null;
+    }
+  }
+  db.planos.splice(idx, 1);
+}
+
+export function mockCriarPlano(row: {
+  nome: string;
+  remadas_por_semana: number;
+  preco_mensal: number | null;
+  preco_trimestral: number | null;
+  preco_semestral: number | null;
+  preco_anual: number | null;
+  valor_equivalente_mensal: number;
+}): { id: string } {
+  if (getMockDb().planos.length >= LIMITE_PLANOS_TOTAL) {
+    throw new Error(MSG_LIMITE_PLANOS_TOTAL_CRIAR);
+  }
+  if (
+    existeOutroPlanoComMesmoNome(
+      getMockDb().planos.map((p) => ({ id: p.id, nome: p.nome })),
+      row.nome
+    )
+  ) {
+    throw new Error(MSG_NOME_PLANO_DUPLICADO);
+  }
+  const db = getMockDb();
+  const id = mockNovoId();
+  const novo: MockPlanoRow = {
+    id,
+    nome: row.nome,
+    status: "ativo",
+    remadas_por_semana: row.remadas_por_semana,
+    preco_mensal: row.preco_mensal,
+    valor: row.valor_equivalente_mensal,
+    preco_trimestral: row.preco_trimestral,
+    preco_semestral: row.preco_semestral,
+    preco_anual: row.preco_anual,
+  };
+  db.planos.push(novo);
+  return { id };
+}
+
+export function mockAtualizarPlano(
+  id: string,
+  row: {
+    nome: string;
+    remadas_por_semana: number;
+    preco_mensal: number | null;
+    preco_trimestral: number | null;
+    preco_semestral: number | null;
+    preco_anual: number | null;
+    valor_equivalente_mensal: number;
+    status: PlanoStatus;
+  }
+): void {
+  const p = getMockDb().planos.find((x) => x.id === id);
+  if (!p) throw new Error("Plano não encontrado (mock).");
+  if (
+    existeOutroPlanoComMesmoNome(
+      getMockDb().planos.map((pl) => ({ id: pl.id, nome: pl.nome })),
+      row.nome,
+      id
+    )
+  ) {
+    throw new Error(MSG_NOME_PLANO_DUPLICADO);
+  }
+  p.nome = row.nome;
+  p.remadas_por_semana = row.remadas_por_semana;
+  p.preco_mensal = row.preco_mensal;
+  p.valor = row.valor_equivalente_mensal;
+  p.preco_trimestral = row.preco_trimestral;
+  p.preco_semestral = row.preco_semestral;
+  p.preco_anual = row.preco_anual;
+  p.status = row.status;
+}
+
+function desdePlanoMockAluno(row: Record<string, unknown>): string {
+  const di = row.data_inicio;
+  if (di != null && String(di).trim() !== "") {
+    return String(di).slice(0, 10);
+  }
+  const ce = row.criado_em;
+  if (ce != null && String(ce).trim() !== "") {
+    return String(ce).slice(0, 10);
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function mockListarAlunosAtivosPlano(planoId: string): AlunoAtivoPlanoLinha[] {
+  const db = getMockDb();
+  const linhas: AlunoAtivoPlanoLinha[] = [];
+  for (const a of db.alunos) {
+    const row = a as Record<string, unknown>;
+    if (String(row.plano_id ?? "") !== planoId) continue;
+    if (String(row.status ?? "") !== "ativo") continue;
+    const desde = desdePlanoMockAluno(row);
+    const idStr = String(row.id);
+    const p = periodoContratoParaAluno(idStr);
+    const vencimento = vencimentoAposInicio(desde, p);
+    linhas.push({
+      id: idStr,
+      nome: String(row.nome ?? ""),
+      avatar_url: row.avatar_url != null ? String(row.avatar_url) : null,
+      desde,
+      periodo: rotuloPeriodoContrato(p),
+      vencimento,
+      pagamento: statusPagamentoApartirDeVencimento(vencimento),
+    });
+  }
+  return linhas.sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
 }
 
 /* ── Turmas ── */
@@ -384,4 +584,19 @@ export function mockAtualizarPagamentoMensal(input: {
       pago_em: pagoEm,
     });
   }
+}
+
+function arredondarMoedaMock(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Valor > 0 ou null se não definido no mock. */
+export function mockObterPrecoPorAula(): number | null {
+  const v = getMockDb().preco_por_aula;
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return arredondarMoedaMock(v);
+}
+
+export function mockSalvarPrecoPorAula(valor: number): void {
+  getMockDb().preco_por_aula = arredondarMoedaMock(valor);
 }

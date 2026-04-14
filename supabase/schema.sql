@@ -82,6 +82,32 @@ create index if not exists idx_pagamentos_mes on public.pagamentos_mensais (mes)
 create index if not exists idx_agendamentos_aluno on public.agendamentos (aluno_id);
 create index if not exists idx_creditos_aluno on public.creditos (aluno_id);
 
+-- Previsão meteo (preenchimento externo, ex. n8n 1x/dia)
+create table if not exists public.meteo_previsao_diaria (
+  id uuid primary key default gen_random_uuid(),
+  local_id text not null default 'default',
+  dia date not null,
+  temperatura_c numeric(5, 2) not null,
+  hora_referencia text not null default '05:00',
+  icon text,
+  descricao_curta text,
+  atualizado_em timestamptz not null default now(),
+  unique (local_id, dia)
+);
+
+create index if not exists idx_meteo_previsao_local_dia
+  on public.meteo_previsao_diaria (local_id, dia);
+
+-- Configuração global do estúdio (linha única id = 1)
+create table if not exists public.estudio_config (
+  id smallint primary key default 1 check (id = 1),
+  preco_por_aula numeric(12, 2) not null default 0
+);
+
+insert into public.estudio_config (id, preco_por_aula)
+values (1, 0)
+on conflict (id) do nothing;
+
 -- RLS: ajuste conforme autenticação do estúdio (política permissiva para desenvolvimento com anon)
 alter table public.planos enable row level security;
 alter table public.alunos enable row level security;
@@ -90,6 +116,8 @@ alter table public.agendamentos enable row level security;
 alter table public.creditos enable row level security;
 alter table public.pagamentos_mensais enable row level security;
 alter table public.turmas enable row level security;
+alter table public.meteo_previsao_diaria enable row level security;
+alter table public.estudio_config enable row level security;
 
 create policy "planos_all" on public.planos for all using (true) with check (true);
 create policy "alunos_all" on public.alunos for all using (true) with check (true);
@@ -98,3 +126,5 @@ create policy "agendamentos_all" on public.agendamentos for all using (true) wit
 create policy "creditos_all" on public.creditos for all using (true) with check (true);
 create policy "pagamentos_all" on public.pagamentos_mensais for all using (true) with check (true);
 create policy "turmas_all" on public.turmas for all using (true) with check (true);
+create policy "meteo_previsao_all" on public.meteo_previsao_diaria for all using (true) with check (true);
+create policy "estudio_config_all" on public.estudio_config for all using (true) with check (true);

@@ -1,23 +1,48 @@
+import { obterPrecoPorAula } from "@/app/actions/configuracoes";
+import { listarPlanos } from "@/app/actions/planos";
+import { AdminPlanosClient } from "@/components/admin/planos/admin-planos-client";
+import { ConfiguracaoSupabase } from "@/components/ConfiguracaoSupabase";
 import { PageShell } from "@/components/PageShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QueryErrorPanel } from "@/components/QueryErrorPanel";
+import { useDataMock } from "@/lib/data-mock";
 
-export default function AdminPlanosPage() {
-  return (
-    <PageShell>
-      <h1 className="text-2xl font-semibold tracking-tight">Planos</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Editar planos (preço, remadas por semana, ativo) — em construção.
-      </p>
-      <Card className="mt-8 max-w-lg">
-        <CardHeader>
-          <CardTitle className="text-base">Próximo passo</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          CRUD em <code className="rounded bg-muted px-1">planos</code> e, quando
-          existir <code className="rounded bg-muted px-1">plano_id</code> em{" "}
-          <code className="rounded bg-muted px-1">alunos</code>, vínculo no perfil.
-        </CardContent>
-      </Card>
-    </PageShell>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function AdminPlanosPage() {
+  const mock = useDataMock();
+
+  if (
+    !mock &&
+    (!process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  ) {
+    return (
+      <PageShell className="max-w-7xl">
+        <ConfiguracaoSupabase />
+      </PageShell>
+    );
+  }
+
+  try {
+    const [planos, precoPorAula] = await Promise.all([
+      listarPlanos(),
+      obterPrecoPorAula(),
+    ]);
+    return (
+      <PageShell className="max-w-7xl">
+        <AdminPlanosClient initialPlanos={planos} precoPorAula={precoPorAula} />
+      </PageShell>
+    );
+  } catch (e) {
+    const err = e as { message?: string; code?: string; details?: string | null };
+    return (
+      <PageShell className="max-w-7xl">
+        <QueryErrorPanel
+          message={err.message ?? "Não foi possível carregar os planos."}
+          contexto="Operação: leitura (GET) na tabela planos."
+          erroRede={false}
+        />
+      </PageShell>
+    );
+  }
 }

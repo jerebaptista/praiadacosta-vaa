@@ -8,7 +8,6 @@ import {
   Loader2,
   Mail,
   MapPin,
-  Pencil,
   Phone,
   X,
 } from "lucide-react";
@@ -232,7 +231,6 @@ function PerfilConteudo({
               className="text-primary hover:bg-muted hover:text-primary"
               onClick={onEditar}
             >
-              <Pencil />
               Editar
             </Button>
           )}

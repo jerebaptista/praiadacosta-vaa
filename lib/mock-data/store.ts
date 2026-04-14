@@ -10,8 +10,14 @@ import { mesAtualPrimeiroDia } from "@/lib/dates";
 export type MockPlanoRow = {
   id: string;
   nome: string;
+  status: "ativo" | "inativo";
   remadas_por_semana: number;
-  preco_mensal: number;
+  preco_mensal: number | null;
+  /** Coluna `valor` (referência mensal). */
+  valor?: number | null;
+  preco_trimestral?: number | null;
+  preco_semestral?: number | null;
+  preco_anual?: number | null;
 };
 
 export type MockTurmaRow = {
@@ -47,6 +53,8 @@ type MockDb = {
   alunos: MockAlunoRow[];
   remadas: MockRemadaRow[];
   pagamentos: MockPagamentoRow[];
+  /** Configuração: valor unitário por aula (BRL). */
+  preco_por_aula: number;
 };
 
 const G = globalThis as unknown as { __PRAIADACOSTA_MOCK_DB__?: MockDb };
@@ -62,6 +70,9 @@ const IDS = {
   aluno2: "c3000000-0000-4000-8000-000000000002",
   aluno3: "c3000000-0000-4000-8000-000000000003",
   aluno4: "c3000000-0000-4000-8000-000000000004",
+  aluno5: "c3000000-0000-4000-8000-000000000005",
+  aluno6: "c3000000-0000-4000-8000-000000000006",
+  aluno7: "c3000000-0000-4000-8000-000000000007",
   remada1: "d4000000-0000-4000-8000-000000000001",
   remada2: "d4000000-0000-4000-8000-000000000002",
   remada3: "d4000000-0000-4000-8000-000000000003",
@@ -71,6 +82,12 @@ const IDS = {
 } as const;
 
 function iso(d: Date) {
+  return d.toISOString();
+}
+
+function isoMesesRelativo(ref: Date, deltaMeses: number) {
+  const d = new Date(ref);
+  d.setMonth(d.getMonth() + deltaMeses);
   return d.toISOString();
 }
 
@@ -97,9 +114,36 @@ function seed(): MockDb {
   passadaNoite.setHours(18, 30, 0, 0);
 
   const planos: MockPlanoRow[] = [
-    { id: IDS.plano1, nome: "1× semana", remadas_por_semana: 1, preco_mensal: 180 },
-    { id: IDS.plano2, nome: "2× semana", remadas_por_semana: 2, preco_mensal: 280 },
-    { id: IDS.plano3, nome: "3× semana", remadas_por_semana: 3, preco_mensal: 360 },
+    {
+      id: IDS.plano1,
+      nome: "1× semana",
+      status: "ativo",
+      remadas_por_semana: 1,
+      preco_mensal: 180,
+      preco_trimestral: 510,
+      preco_semestral: 990,
+      preco_anual: 1836,
+    },
+    {
+      id: IDS.plano2,
+      nome: "2× semana",
+      status: "ativo",
+      remadas_por_semana: 2,
+      preco_mensal: 280,
+      preco_trimestral: 798,
+      preco_semestral: 1540,
+      preco_anual: 2856,
+    },
+    {
+      id: IDS.plano3,
+      nome: "3× semana",
+      status: "inativo",
+      remadas_por_semana: 3,
+      preco_mensal: 360,
+      preco_trimestral: 1026,
+      preco_semestral: 1980,
+      preco_anual: 3672,
+    },
   ];
 
   const turmas: MockTurmaRow[] = [
@@ -149,6 +193,7 @@ function seed(): MockDb {
       numero: "1200",
       complemento: "Apto 302",
       plano_id: IDS.plano2,
+      data_inicio: "2024-01-15",
       avatar_url: null,
       status: "ativo",
       criado_em: iso(agora),
@@ -171,7 +216,7 @@ function seed(): MockDb {
       plano_id: IDS.plano3,
       avatar_url: null,
       status: "pendente",
-      criado_em: iso(agora),
+      criado_em: isoMesesRelativo(agora, -2),
     },
     {
       id: IDS.aluno3,
@@ -191,7 +236,7 @@ function seed(): MockDb {
       plano_id: null,
       avatar_url: null,
       status: "inativo",
-      criado_em: iso(agora),
+      criado_em: isoMesesRelativo(agora, -6),
     },
     {
       id: IDS.aluno4,
@@ -209,9 +254,10 @@ function seed(): MockDb {
       numero: "88",
       complemento: null,
       plano_id: IDS.plano1,
+      data_inicio: "2023-06-01",
       avatar_url: null,
       status: "ativo",
-      criado_em: iso(agora),
+      criado_em: isoMesesRelativo(agora, -10),
     },
   ];
 
@@ -267,7 +313,14 @@ function seed(): MockDb {
     { aluno_id: IDS.aluno4, mes, status: "pago", pago_em: iso(agora) },
   ];
 
-  return { planos, turmas, alunos, remadas, pagamentos };
+  return {
+    planos,
+    turmas,
+    alunos,
+    remadas,
+    pagamentos,
+    preco_por_aula: 50,
+  };
 }
 
 export function getMockDb(): MockDb {

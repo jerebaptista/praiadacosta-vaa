@@ -8,7 +8,7 @@ import {
   Users,
   Waves,
   ClipboardList,
-  CalendarDays,
+  Layers,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -38,9 +38,9 @@ const principal = [
 const admin = [
   { href: "/", label: "Resumo", icon: LayoutDashboard, exact: true },
   { href: "/admin/remadas", label: "Remadas", icon: Waves },
-  { href: "/admin/turmas", label: "Turmas", icon: CalendarDays },
   { href: "/alunos", label: "Alunos", icon: Users },
-  { href: "/admin/planos", label: "Planos", icon: ClipboardList },
+  { href: "/admin/turmas", label: "Turmas", icon: ClipboardList },
+  { href: "/admin/planos", label: "Planos", icon: Layers },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
 

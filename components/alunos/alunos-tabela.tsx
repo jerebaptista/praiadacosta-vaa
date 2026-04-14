@@ -42,6 +42,8 @@ export type AlunoLinha = {
   avatar_url?: string | null;
   /** Dados já carregados na página — evita nova ida ao servidor ao abrir “Editar”. */
   dadosEdicao?: AlunoFormData;
+  /** `yyyy-mm` — mês de cadastro (`created_at` / `criado_em`), para o gráfico. */
+  cadastroMesId?: string | null;
 };
 
 /* ── Badge de status ── */
@@ -171,8 +173,8 @@ export function AlunosTabela({ alunos, onVerDetalhes, onEditar }: Props) {
           <TableRow>
             <TableHead className="w-10" />
             <TableHead>Nome</TableHead>
-            <TableHead>Telefone</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Telefone</TableHead>
             <TableHead>Plano</TableHead>
             <TableHead>Turmas</TableHead>
             <TableHead className="w-[1%] min-w-[3rem]" />
@@ -202,11 +204,11 @@ export function AlunosTabela({ alunos, onVerDetalhes, onEditar }: Props) {
                   {a.nome}
                 </button>
               </TableCell>
-              <TableCell className="text-muted-foreground">
-                {a.telefone ? formatarTelefoneBrasilExibicao(a.telefone) : "—"}
-              </TableCell>
               <TableCell>
                 <BadgeStatus status={a.status} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {a.telefone ? formatarTelefoneBrasilExibicao(a.telefone) : "—"}
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {a.plano ?? "—"}

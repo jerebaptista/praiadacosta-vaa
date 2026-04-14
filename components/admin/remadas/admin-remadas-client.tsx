@@ -10,8 +10,15 @@ import {
   startOfMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Plus, Table2 } from "lucide-react";
+import { CalendarDays, ChevronDown, Plus, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -23,17 +30,35 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CriarRemadaDialog } from "@/components/admin/remadas/criar-remada-dialog";
 import { RemadasCalendarioView } from "@/components/admin/remadas/remadas-calendario-view";
 import { RemadasTabela } from "@/components/admin/remadas/remadas-tabela";
+import { dateKeyLocal } from "@/lib/calendar-dates";
+import {
+  filtrarPrevisaoMeteoJanela,
+  METEO_DIAS_SEGUINTES,
+  type MeteoDiaSnapshot,
+} from "@/lib/meteo";
 import type { RemadaLinha, RemadaStatus } from "@/lib/remadas-geracao";
+import { cn } from "@/lib/utils";
+
+const ROTULO_STATUS_FILTRO: Record<RemadaStatus, string> = {
+  agendada: "Agendadas",
+  concluida: "Concluídas",
+  cancelada: "Canceladas",
+};
 
 const MESES = Array.from({ length: 12 }, (_, i) => i);
 
 type FiltroStatus = "todos" | RemadaStatus;
 
 type Props = {
-  initialRemadas: RemadaLinha[];  
+  initialRemadas: RemadaLinha[];
+  /** Dados crus (Supabase + demo); o filtro usa o mesmo “hoje” que o calendário (`dateKeyLocal`). */
+  previsaoMeteoBruta?: Record<string, MeteoDiaSnapshot>;
 };
 
-export function AdminRemadasClient({ initialRemadas }: Props) {
+export function AdminRemadasClient({
+  initialRemadas,
+  previsaoMeteoBruta = {},
+}: Props) {
   const [remadas, setRemadas] = useState<RemadaLinha[]>(initialRemadas);
   const [mes, setMes] = useState(() => startOfMonth(new Date()));
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todos");
@@ -43,7 +68,7 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
   }, [initialRemadas]);
 
   const [dialogAberto, setDialogAberto] = useState(false);
-  const [aba, setAba] = useState<"tabela" | "calendario">("tabela");
+  const [aba, setAba] = useState<"tabela" | "calendario">("calendario");
 
   const anoAtual = getYear(new Date());
 
@@ -74,6 +99,16 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
       return true;
     });
   }, [remadas, mes, filtroStatus]);
+
+  const previsaoMeteo = useMemo(
+    () =>
+      filtrarPrevisaoMeteoJanela(
+        previsaoMeteoBruta,
+        METEO_DIAS_SEGUINTES,
+        dateKeyLocal(new Date())
+      ),
+    [previsaoMeteoBruta]
+  );
 
   return (
     <div className="space-y-6">
@@ -110,20 +145,20 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
         <div className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-2 overflow-visible py-1">
           <TabsList className="h-9 shrink-0 bg-muted">
             <TabsTrigger
-              value="tabela"
-              className="size-8 p-0 px-0"
-              title="Tabela"
-            >
-              <Table2 className="size-4" />
-              <span className="sr-only">Tabela</span>
-            </TabsTrigger>
-            <TabsTrigger
               value="calendario"
               className="size-8 p-0 px-0"
               title="Calendário"
             >
               <CalendarDays className="size-4" />
               <span className="sr-only">Calendário</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="tabela"
+              className="size-8 p-0 px-0"
+              title="Tabela"
+            >
+              <Table2 className="size-4" />
+              <span className="sr-only">Tabela</span>
             </TabsTrigger>
           </TabsList>
 
@@ -164,32 +199,52 @@ export function AdminRemadasClient({ initialRemadas }: Props) {
               </SelectContent>
             </Select>
 
-            <Select
-              value={filtroStatus}
-              onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
-            >
-              <SelectTrigger className="h-8 w-[7.5rem] shrink-0">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="agendada">Agendada</SelectItem>
-                <SelectItem value="concluida">Concluída</SelectItem>
-                <SelectItem value="cancelada">Cancelada</SelectItem>
-              </SelectContent>
-            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label="Filtrar por status"
+                  className={cn(
+                    "flex h-8 min-w-[7.5rem] shrink-0 items-center justify-between gap-1.5 rounded-lg border-input px-2.5 font-normal",
+                    filtroStatus === "todos"
+                      ? "text-muted-foreground"
+                      : "text-foreground"
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {filtroStatus === "todos"
+                      ? "Status"
+                      : ROTULO_STATUS_FILTRO[filtroStatus]}
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[7.5rem]" sideOffset={4}>
+                <DropdownMenuRadioGroup
+                  value={filtroStatus}
+                  onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
+                >
+                  <DropdownMenuRadioItem value="todos">Todos</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="agendada">Agendadas</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="concluida">Concluídas</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="cancelada">Canceladas</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <TabsContent value="tabela" className="mt-0 outline-none">
-          <RemadasTabela dados={filtradas} />
-        </TabsContent>
         <TabsContent value="calendario" className="mt-0 outline-none">
           <RemadasCalendarioView
             mes={mes}
             onMesChange={setMes}
             filtradas={filtradas}
+            previsaoPorDia={previsaoMeteo}
           />
+        </TabsContent>
+        <TabsContent value="tabela" className="mt-0 outline-none">
+          <RemadasTabela dados={filtradas} />
         </TabsContent>
       </Tabs>
     </div>

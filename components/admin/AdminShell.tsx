@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutGrid, LogOut, Menu, Users, Waves, CreditCard, ClipboardList, CalendarDays } from "lucide-react";
+import { LayoutGrid, LogOut, Menu, Users, Waves, CreditCard, ClipboardList, Layers } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,8 +20,8 @@ const nav = [
   { href: "/admin", label: "Início", icon: LayoutGrid, exact: true },
   { href: "/admin/alunos", label: "Alunos", icon: Users },
   { href: "/admin/remadas", label: "Remadas", icon: Waves },
-  { href: "/admin/turmas", label: "Turmas", icon: CalendarDays },
-  { href: "/admin/planos", label: "Planos", icon: ClipboardList },
+  { href: "/admin/turmas", label: "Turmas", icon: ClipboardList },
+  { href: "/admin/planos", label: "Planos", icon: Layers },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: CreditCard },
 ] as const;
 

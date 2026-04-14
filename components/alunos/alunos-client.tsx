@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AlunosCadastroAreaChart } from "@/components/alunos/alunos-cadastro-area-chart";
 import { AlunosTabela, type AlunoLinha } from "@/components/alunos/alunos-tabela";
 import { AlunoFormDrawer } from "@/components/alunos/aluno-form-drawer";
 import { AlunoDrawer } from "@/components/alunos/aluno-drawer";
@@ -178,6 +179,11 @@ export function AlunosClient({ initialAlunos, turmasOpcoes, planosOpcoes, planos
   function abrirFormCriar() { setFormAlunoId(null); setFormOpen(true); }
   function abrirFormEditar(id: string) { setFormAlunoId(id); setFormOpen(true); }
 
+  const cadastroMesIdsParaGrafico = useMemo(
+    () => initialAlunos.map((a) => a.cadastroMesId),
+    [initialAlunos]
+  );
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase().replace(/\D/g, "") || busca.trim().toLowerCase();
     return initialAlunos.filter((a) => {
@@ -219,6 +225,8 @@ export function AlunosClient({ initialAlunos, turmasOpcoes, planosOpcoes, planos
           Novo aluno
         </Button>
       </div>
+
+      <AlunosCadastroAreaChart cadastroMesIds={cadastroMesIdsParaGrafico} />
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 overflow-visible py-1">

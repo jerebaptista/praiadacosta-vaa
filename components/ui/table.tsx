@@ -4,11 +4,16 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  /** Classes do wrapper externo (ex.: `overflow-x-visible` quando a tabela já cabe em 100%). */
+  containerClassName?: string;
+};
+
+function Table({ className, containerClassName, ...props }: TableProps) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full min-w-0", containerClassName ?? "overflow-x-auto")}
     >
       <table
         data-slot="table"

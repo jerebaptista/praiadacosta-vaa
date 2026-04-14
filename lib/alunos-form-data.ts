@@ -26,7 +26,7 @@ export type AlunoFormData = {
  * correres `supabase/migrations/20260407000000_alunos_colunas_extras.sql` (e afins).
  */
 export const ALUNOS_SELECT_LISTAGEM_ADMIN =
-  "id, nome, email, telefone, data_nascimento, status";
+  "id, nome, email, telefone, data_nascimento, status, criado_em";
 
 /** Mesmo núcleo que a listagem — evita 42703 se `created_at` / `criado_em` tiver outro nome na base. */
 export const ALUNOS_SELECT_PERFIL = ALUNOS_SELECT_LISTAGEM_ADMIN;

@@ -22,6 +22,7 @@ import { buscarAlunoFormData, criarAluno, atualizarAluno } from "@/app/actions/a
 import type { AlunoFormData } from "@/lib/alunos-form-data";
 import { LABEL_DIA_SEMANA, ORDEM_DIA_SEMANA } from "@/lib/remadas-geracao";
 import { cn } from "@/lib/utils";
+import { valorMensalReferenciaDePlanoLinha } from "@/lib/plano-form";
 import type { PlanoOpcao, TurmaSlot } from "@/components/alunos/criar-aluno-dialog";
 import {
   digitosNacionaisTelefoneBr,
@@ -445,7 +446,16 @@ export function AlunoFormDrawer({
                       <SelectItem key={p.id} value={p.id}>
                         {p.nome}
                         <span className="ml-1 text-xs text-muted-foreground">
-                          · {p.remadas_por_semana}×/sem · {p.preco_mensal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          · {p.remadas_por_semana}×/sem ·{" "}
+                          {(() => {
+                            const ref = valorMensalReferenciaDePlanoLinha(p);
+                            return ref != null && ref > 0
+                              ? ref.toLocaleString("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                })
+                              : "—";
+                          })()}
                         </span>
                       </SelectItem>
                     ))}

@@ -6,6 +6,7 @@ import type { AlunoLinha } from "@/components/alunos/alunos-tabela";
 import type { PlanoOpcao, TurmaSlot } from "@/components/alunos/criar-aluno-dialog";
 import {
   ALUNOS_SELECT_LISTAGEM_ADMIN,
+  alunoCriadoEmIso,
   rowToAlunoFormData,
 } from "@/lib/alunos-form-data";
 import { useDataMock } from "@/lib/data-mock";
@@ -37,7 +38,16 @@ export default async function AlunosPage() {
 
   let rows: Record<string, unknown>[] | null;
   let turmasRows: { id: string; dias_semana: unknown; hora: unknown; vagas?: unknown; status: string }[];
-  let planosRows: { id: string; nome: string; remadas_por_semana: unknown; preco_mensal: unknown }[];
+  let planosRows: {
+    id: string;
+    nome: string;
+    remadas_por_semana: unknown;
+    preco_mensal: unknown;
+    preco_trimestral?: unknown;
+    preco_semestral?: unknown;
+    preco_anual?: unknown;
+    status?: unknown;
+  }[];
   let error: { message: string; code?: string; details?: string | null } | null = null;
 
   if (mock) {
@@ -54,8 +64,10 @@ export default async function AlunosPage() {
         .eq("status", "ativa"),
       supabase
         .from("planos")
-        .select("id, nome, remadas_por_semana, preco_mensal")
-        .order("preco_mensal"),
+        .select(
+          "id, nome, status, remadas_por_semana, preco_mensal, preco_trimestral, preco_semestral, preco_anual"
+        )
+        .order("nome"),
     ]);
     error = alRes.error;
     rows = (alRes.data ?? []) as Record<string, unknown>[];
@@ -77,6 +89,9 @@ export default async function AlunosPage() {
 
   const alunos: AlunoLinha[] = (rows ?? []).map((a) => {
     const row = a as Record<string, unknown>;
+    const criadoIso = alunoCriadoEmIso(row);
+    const cadastroMesId =
+      criadoIso && criadoIso.length >= 7 ? criadoIso.slice(0, 7) : null;
     return {
       id: String(a.id),
       nome: String(a.nome ?? ""),
@@ -86,6 +101,7 @@ export default async function AlunosPage() {
       turmas: [],
       avatar_url: a.avatar_url ? String(a.avatar_url) : null,
       dadosEdicao: rowToAlunoFormData(row),
+      cadastroMesId,
     };
   });
 
@@ -95,12 +111,33 @@ export default async function AlunosPage() {
     hora: String(t.hora ?? "").slice(0, 5),
   }));
 
+  /* Só planos ativos: novos alunos não podem escolher plano inativo (alunos atuais mantêm o vínculo). */
+  const planosRowsAtivos = (planosRows ?? []).filter((p) => {
+    const s = String(p.status ?? "ativo").toLowerCase();
+    return s !== "inativo";
+  });
+
   /* Planos completos para o dialog */
-  const planos: PlanoOpcao[] = (planosRows ?? []).map((p) => ({
+  const planos: PlanoOpcao[] = planosRowsAtivos.map((p) => ({
     id: String(p.id),
     nome: String(p.nome ?? ""),
     remadas_por_semana: Number(p.remadas_por_semana ?? 1),
-    preco_mensal: Number(p.preco_mensal ?? 0),
+    preco_mensal:
+      p.preco_mensal != null && String(p.preco_mensal).trim() !== ""
+        ? Number(p.preco_mensal)
+        : null,
+    preco_trimestral:
+      p.preco_trimestral != null && String(p.preco_trimestral).trim() !== ""
+        ? Number(p.preco_trimestral)
+        : null,
+    preco_semestral:
+      p.preco_semestral != null && String(p.preco_semestral).trim() !== ""
+        ? Number(p.preco_semestral)
+        : null,
+    preco_anual:
+      p.preco_anual != null && String(p.preco_anual).trim() !== ""
+        ? Number(p.preco_anual)
+        : null,
   }));
 
   /* Slots individuais de turma (turma × dia) para o dialog */

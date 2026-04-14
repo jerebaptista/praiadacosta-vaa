@@ -42,6 +42,20 @@ export function hojeLocalISODate(): string {
   return `${y}-${mo}-${da}`;
 }
 
+/** Soma meses a uma data `YYYY-MM-DD` em calendário local (ex.: anual a partir de hoje → +12 meses). */
+export function adicionarMesesDataYmd(ymd: string, meses: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    return ymd;
+  }
+  const dt = new Date(y, m - 1, d);
+  dt.setMonth(dt.getMonth() + meses);
+  const yy = dt.getFullYear();
+  const mo = String(dt.getMonth() + 1).padStart(2, "0");
+  const da = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mo}-${da}`;
+}
+
 export function formatarMesPt(isoMes: string): string {
   const [y, m] = isoMes.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1, 1));

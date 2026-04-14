@@ -27,13 +27,17 @@ import {
   TELEFONE_DDI_BR,
 } from "@/lib/telefone-br";
 import { cn } from "@/lib/utils";
+import { valorMensalReferenciaDePlanoLinha } from "@/lib/plano-form";
 
 /* ── Tipos ── */
 export type PlanoOpcao = {
   id: string;
   nome: string;
   remadas_por_semana: number;
-  preco_mensal: number;
+  preco_mensal: number | null;
+  preco_trimestral: number | null;
+  preco_semestral: number | null;
+  preco_anual: number | null;
 };
 
 export type TurmaSlot = {
@@ -536,10 +540,15 @@ export function CriarAlunoDialog({ open, onOpenChange, planos, turmaSlots }: Pro
                         {p.nome}
                         <span className="text-xs text-muted-foreground">
                           · {p.remadas_por_semana}×/sem ·{" "}
-                          {p.preco_mensal.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}
+                          {(() => {
+                            const ref = valorMensalReferenciaDePlanoLinha(p);
+                            return ref != null && ref > 0
+                              ? ref.toLocaleString("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                })
+                              : "—";
+                          })()}
                         </span>
                       </span>
                     </SelectItem>

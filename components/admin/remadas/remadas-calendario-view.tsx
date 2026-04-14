@@ -47,6 +47,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { dateKeyLocal } from "@/lib/calendar-dates";
+import { MeteoIconeLucide } from "@/lib/meteo-icone-lucide";
+import type { MeteoDiaSnapshot } from "@/lib/meteo";
 import type { RemadaLinha, RemadaStatus } from "@/lib/remadas-geracao";
 import { cn } from "@/lib/utils";
 
@@ -261,11 +263,13 @@ function CelulaoDia({
   remadas,
   desteMes,
   onEditar,
+  meteo,
 }: {
   dia: Date;
   remadas: RemadaLinha[];
   desteMes: boolean;
   onEditar: (r: RemadaLinha) => void;
+  meteo?: MeteoDiaSnapshot;
 }) {
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const hoje = isToday(dia);
@@ -279,19 +283,32 @@ function CelulaoDia({
         !desteMes && "bg-muted/20"
       )}
     >
-      {/* Número do dia */}
-      <span
-        className={cn(
-          "mb-0.5 flex size-6 shrink-0 items-center justify-center self-start rounded-full text-xs font-medium",
-          hoje
-            ? "bg-primary text-primary-foreground"
-            : desteMes
-              ? "text-foreground"
-              : "text-muted-foreground/50"
+      {/* Número do dia + previsão (quando existir) */}
+      <div className="mb-0.5 flex w-full min-w-0 items-start justify-between gap-0.5">
+        <span
+          className={cn(
+            "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
+            hoje
+              ? "bg-primary text-primary-foreground"
+              : desteMes
+                ? "text-foreground"
+                : "text-muted-foreground/50"
+          )}
+        >
+          {format(dia, "d")}
+        </span>
+        {meteo != null && (
+          <div
+            className="flex min-w-0 max-w-[calc(100%-1.75rem)] items-center gap-0.5 leading-none"
+            title="Previsão (atualização diária)"
+          >
+            <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+              {Math.round(meteo.temperatura_c)}°
+            </span>
+            <MeteoIconeLucide codigo={meteo.icon} />
+          </div>
         )}
-      >
-        {format(dia, "d")}
-      </span>
+      </div>
 
       {/* Eventos */}
       <div className="flex flex-col gap-0.5">
@@ -326,9 +343,14 @@ type Props = {
   mes: Date;
   onMesChange: (d: Date) => void;
   filtradas: RemadaLinha[];
+  previsaoPorDia?: Record<string, MeteoDiaSnapshot>;
 };
 
-export function RemadasCalendarioView({ mes, filtradas }: Props) {
+export function RemadasCalendarioView({
+  mes,
+  filtradas,
+  previsaoPorDia = {},
+}: Props) {
   const [remadaEditar, setRemadaEditar] = useState<RemadaLinha | null>(null);
 
   /* Grid: semana começa na segunda */
@@ -377,6 +399,7 @@ export function RemadasCalendarioView({ mes, filtradas }: Props) {
           {dias.map((dia, i) => {
             const key = dateKeyLocal(dia);
             const remadas = porDia.get(key) ?? [];
+            const meteo = previsaoPorDia[key];
             const desteMes = isSameMonth(dia, mes);
             /* Remove borda direita na última coluna e borda inferior na última linha */
             const ultimaCol = (i + 1) % 7 === 0;
@@ -395,6 +418,7 @@ export function RemadasCalendarioView({ mes, filtradas }: Props) {
                   remadas={remadas}
                   desteMes={desteMes}
                   onEditar={setRemadaEditar}
+                  meteo={meteo}
                 />
               </div>
             );
